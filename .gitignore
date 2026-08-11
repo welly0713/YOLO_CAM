@@ -1,0 +1,42 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs and local runtime files
+*.log
+logs/
+tmp/
+*.db
+*.sqlite3
+
+# YOLO datasets, training outputs, caches, and model artifacts
+runs/
+datasets/
+.ultralytics/
+*.pt
+*.onnx
+*.engine
+*.weights
+*.h5

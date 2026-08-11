@@ -1,0 +1,4 @@
+# Keep the Docker image CPU-only.  The default PyPI torch wheel currently
+# includes CUDA dependencies that this RTSP/CPU deployment cannot use.
+torch==2.13.0+cpu
+torchvision==0.28.0+cpu

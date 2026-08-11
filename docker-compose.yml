@@ -1,0 +1,26 @@
+services:
+  yolo-cam:
+    build: .
+    container_name: yolo-cam
+    env_file:
+      - .env
+    environment:
+      CAMERA_CONFIG_PATH: /data/cameras.json
+    ports:
+      - "8090:8080"
+    restart: unless-stopped
+    # Keep an inference fault from exhausting the Docker Desktop/WSL VM.
+    # If the hard limit is exceeded Docker terminates this container; the
+    # restart policy starts it again.
+    mem_limit: 4g
+    mem_reservation: 1g
+    cpus: 4.0
+    init: true
+    volumes:
+      # Keeps yolo11n.pt and other Ultralytics downloads after container rebuilds.
+      - ultralytics-cache:/root/.config/Ultralytics
+      - camera-config:/data
+
+volumes:
+  ultralytics-cache:
+  camera-config:
