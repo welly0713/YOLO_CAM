@@ -103,6 +103,8 @@ class Settings:
     roi_dwell_seconds: float
 
     log_level: str
+    settings_password: str = ""
+    dashboard_session_secret: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -196,6 +198,8 @@ class Settings:
             web_port=_get_int("WEB_PORT", 8080),
             camera_config_path=_get_str("CAMERA_CONFIG_PATH", "data/cameras.json"),
             roi_dwell_seconds=_get_float("ROI_DWELL_SECONDS", 10.0),
+            settings_password=_get_str("DASHBOARD_SETTINGS_PASSWORD"),
+            dashboard_session_secret=_get_str("DASHBOARD_SESSION_SECRET"),
             log_level=_get_str("LOG_LEVEL", "INFO").upper(),
         )
 

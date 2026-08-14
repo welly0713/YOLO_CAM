@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+import hmac
 import json
 import logging
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -16,7 +18,7 @@ from zoneinfo import ZoneInfo
 import cv2
 import numpy as np
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, jsonify, render_template_string, request
+from flask import Flask, Response, abort, jsonify, redirect, render_template_string, request, session, url_for
 from ultralytics import YOLO
 
 from .camera import LatestFrameReader
@@ -46,6 +48,7 @@ def _default_camera(camera_id: str, index: int, settings: Settings) -> dict[str,
         "id": camera_id,
         "name": f"IP Camera {index}",
         "enabled": bool(url),
+        "alert_enabled": True,
         "rtsp_url": url,
         "roi": [],
         "dwell_seconds": settings.roi_dwell_seconds,
@@ -83,6 +86,7 @@ class CameraConfigStore:
             item["id"] = camera_id
             item["name"] = str(item["name"])[:80] or f"IP Camera {index}"
             item["enabled"] = bool(item["enabled"])
+            item["alert_enabled"] = bool(item.get("alert_enabled", True))
             item["rtsp_url"] = str(item["rtsp_url"]).strip()
             item["dwell_seconds"] = max(1.0, min(float(item["dwell_seconds"]), 3600.0))
             roi = item.get("roi", [])
@@ -206,7 +210,11 @@ class CameraWorker:
                 del self.state.tracks[key]
 
             for track_id, track in self.state.tracks.items():
-                if not track.alerted and now - track.entered_at >= self.config["dwell_seconds"]:
+                if (
+                    self.config.get("alert_enabled", True)
+                    and not track.alerted
+                    and now - track.entered_at >= self.config["dwell_seconds"]
+                ):
                     track.alerted = True
                     self.state.alert_sequence += 1
                     self.state.last_alert = {
@@ -256,6 +264,7 @@ class CameraWorker:
             ]
             return {
                 "id": self.id, "name": self.config["name"], "enabled": self.config["enabled"],
+                "alert_enabled": self.config.get("alert_enabled", True),
                 "online": self.state.online, "roi_configured": len(self.config["roi"]) >= 3,
                 "detections": len(self.state.detections), "tracks": active,
                 "alert_sequence": self.state.alert_sequence, "last_alert": self.state.last_alert,
@@ -418,10 +427,61 @@ HOME = HOME.replace(
 )
 
 
+HOME = HOME.replace(
+    "</head>",
+    "<style>#sound-toggle{display:none!important}</style></head>",
+    1,
+)
+SETTINGS = SETTINGS.replace(
+    "</label><label class='wide'>RTSP URL",
+    "</label><label class='enabled'><input type='checkbox' data-k='alert_enabled' ${c.alert_enabled?'checked':''}> 啟用警告</label><label class='wide'>RTSP URL",
+    1,
+)
+SETTINGS = SETTINGS.replace(
+    "<button id='save' class='save'>",
+    "<label class='sound-setting'><input id='settings-sound' type='checkbox'> 告警聲</label><button id='test-sound' class='save' type='button'>測試告警聲</button><button id='save' class='save'>",
+    1,
+)
+SETTINGS = SETTINGS.replace(
+    "</head>",
+    "<style>.sound-setting{display:inline-flex;align-items:center;gap:6px;margin-right:12px;color:#b6c3c5}.sound-setting input{width:auto;margin:0;accent-color:#12a99d}</style></head>",
+    1,
+)
+SETTINGS = SETTINGS.replace(
+    "</body>",
+    """<script>const soundKey='yolo-cam-sound-enabled',settingsSound=document.querySelector('#settings-sound');settingsSound.checked=localStorage.getItem(soundKey)!=='false';settingsSound.addEventListener('change',()=>localStorage.setItem(soundKey,String(settingsSound.checked)));document.querySelector('#test-sound').addEventListener('click',()=>{const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;const ctx=new Ctx(),o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime;o.type='sawtooth';o.frequency.setValueAtTime(620,t);o.frequency.linearRampToValueAtTime(1180,t+.26);o.frequency.linearRampToValueAtTime(620,t+.52);g.gain.setValueAtTime(.18,t);g.gain.exponentialRampToValueAtTime(.001,t+.65);o.connect(g).connect(ctx.destination);o.start(t);o.stop(t+.7);});</script></body>""",
+    1,
+)
+
+SETTINGS_LOGIN = """<!doctype html><html lang='zh-Hant'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>YOLO CAM 設定登入</title><style>body{margin:0;background:#0b0f12;color:#dbe6e7;font:14px system-ui;display:grid;place-items:center;min-height:100vh}.box{width:min(360px,calc(100vw - 40px));background:#13191d;border:1px solid #263139;border-radius:5px;padding:24px;box-sizing:border-box}h1{font-size:18px;margin:0 0 18px}label{display:block;color:#9aa9ad}input{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border:1px solid #354249;background:#0b0f12;color:#dbe6e7;border-radius:3px}button{width:100%;margin-top:14px;padding:10px;border:1px solid #168f86;background:#07514d;color:#d8fffa;border-radius:3px;cursor:pointer}.error{color:#ff8984;min-height:20px;margin:10px 0 0}</style></head><body><main class='box'><h1>IP Camera 設定</h1><form method='post'><label>請輸入設定密碼<input name='password' type='password' autocomplete='current-password' required autofocus></label><button type='submit'>登入</button><p class='error'>{{ error }}</p></form></main></body></html>"""
+
+
 def create_app(settings: Settings) -> Flask:
     store = CameraConfigStore(settings.camera_config_path, settings)
     service = MonitorService(settings, store)
     app = Flask(__name__)
+    app.secret_key = settings.dashboard_session_secret or secrets.token_urlsafe(32)
+
+    def settings_authenticated() -> bool:
+        return session.get("settings_authenticated") is True
+
+    @app.route("/settings/login", methods=["GET", "POST"])
+    def settings_login():
+        if settings_authenticated():
+            return redirect(url_for("settings_page"))
+        if request.method == "POST":
+            supplied = request.form.get("password", "")
+            configured = settings.settings_password
+            if configured and hmac.compare_digest(supplied, configured):
+                session["settings_authenticated"] = True
+                return redirect(url_for("settings_page"))
+            return render_template_string(SETTINGS_LOGIN, error="密碼錯誤或尚未設定密碼"), 401
+        return render_template_string(SETTINGS_LOGIN, error="")
+
+    @app.get("/settings/logout")
+    def settings_logout():
+        session.pop("settings_authenticated", None)
+        return redirect(url_for("home"))
 
     @app.get("/")
     def home():
@@ -429,6 +489,8 @@ def create_app(settings: Settings) -> Flask:
 
     @app.get("/settings")
     def settings_page():
+        if not settings_authenticated():
+            return redirect(url_for("settings_login"))
         return render_template_string(SETTINGS)
 
     @app.get("/api/status")
@@ -437,6 +499,8 @@ def create_app(settings: Settings) -> Flask:
 
     @app.route("/api/config", methods=["GET", "POST"])
     def config():
+        if not settings_authenticated():
+            return jsonify({"error": "settings authentication required"}), 401
         if request.method == "GET":
             return jsonify(store.get())
         try:

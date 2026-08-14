@@ -20,6 +20,7 @@ def test_alert_timestamp_uses_taipei_time():
 
 def test_dashboard_has_three_live_slots_and_four_camera_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("CAMERA_SOURCE", "webcam")
+    monkeypatch.setenv("DASHBOARD_SETTINGS_PASSWORD", "test-password")
     settings = replace(Settings.from_env(), camera_config_path=str(tmp_path / "cameras.json"))
     with patch("app.dashboard.YOLO", FakeYOLO):
         app = create_app(settings)
@@ -31,8 +32,12 @@ def test_dashboard_has_three_live_slots_and_four_camera_settings(tmp_path, monke
         assert b"sawtooth" in home.data
         assert "確認關閉本次警報".encode() in home.data
         assert b"o.stop(t+30)" in home.data
+        assert client.get("/settings").status_code == 302
+        assert client.get("/api/config").status_code == 401
+        assert client.post("/settings/login", data={"password": "test-password"}).status_code == 302
         config = client.get("/api/config").get_json()
         assert len(config["cameras"]) == 4
+        assert config["cameras"][0]["alert_enabled"] is True
         config["cameras"][0]["roi"] = [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4]]
         assert client.post("/api/config", json=config).status_code == 200
 
