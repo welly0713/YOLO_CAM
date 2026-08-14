@@ -174,7 +174,8 @@ class Settings:
             rtsp_reconnect_delay_seconds=_get_float(
                 "RTSP_RECONNECT_DELAY_SECONDS", 5.0
             ),
-            model_path=_get_str("MODEL_PATH", "yolo26n.pt"),
+            # Keep the production model at one explicit path inside the image.
+            model_path=_get_str("MODEL_PATH", "/app/yolo26m.pt"),
             yolo_device=_get_str("YOLO_DEVICE", "cpu"),
             person_confidence=person_confidence,
             yolo_image_size=yolo_image_size,

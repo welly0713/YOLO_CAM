@@ -24,6 +24,6 @@ RUN pip install --no-cache-dir \
 
 COPY app ./app
 
-# The model is downloaded on first start if it is not already in this cache.
-# docker-compose persists the cache in a named volume.
+# The production model path is fixed at /app/yolo26m.pt. Ultralytics downloads
+# yolo26m.pt there on first start if the file is not already present.
 CMD ["python", "-m", "app.main"]

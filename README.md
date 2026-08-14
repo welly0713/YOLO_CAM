@@ -58,7 +58,7 @@ SHOW_PREVIEW=false
    python -m app.main
    ```
 
-第一次啟動如果本機沒有 `yolo26n.pt`，Ultralytics 會下載模型；需要能連網一次。可用 `Ctrl+C` 停止。
+第一次啟動如果容器內沒有 `/app/yolo26m.pt`，Ultralytics 會下載 YOLO26m 到這個固定位置；需要能連網一次。可用 `Ctrl+C` 停止。
 
 ## Docker 執行
 
@@ -101,7 +101,7 @@ Docker 會將 Ultralytics 模型快取保存於 named volume，因此重建容�
 | `RTSP_HOST` / `RTSP_PORT` | — / `554` | 監視器 IP 與 RTSP port |
 | `RTSP_USERNAME` / `RTSP_PASSWORD` | — | RTSP 帳號與密碼 |
 | `RTSP_PATH` | `/Streaming/Channels/101` | 監視器的串流路徑 |
-| `MODEL_PATH` | `yolo26n.pt` | YOLO 模型名稱或容器內的模型檔案路徑 |
+| `MODEL_PATH` | `/app/yolo26m.pt` | 固定使用 YOLO26m 模型檔案 |
 | `PERSON_CONFIDENCE` | `0.5` | 人員偵測信心度門檻，0 到 1 |
 | `SAMPLE_INTERVAL_SECONDS` | `1` | 取樣間隔 |
 | `DETECTION_WINDOW_SECONDS` | `15` | 滑動判斷視窗 |
