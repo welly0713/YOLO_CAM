@@ -467,14 +467,17 @@ def create_app(settings: Settings) -> Flask:
 
     @app.route("/settings/login", methods=["GET", "POST"])
     def settings_login():
-        if settings_authenticated():
-            return redirect(url_for("settings_page"))
         if request.method == "POST":
             supplied = request.form.get("password", "")
             configured = settings.settings_password
             if configured and hmac.compare_digest(supplied, configured):
                 session["settings_authenticated"] = True
-                return redirect(url_for("settings_page"))
+                # A one-time entry token makes every new /settings visit,
+                # including a refresh, require the password again while still
+                # allowing the page's /api/config requests to work.
+                entry_token = secrets.token_urlsafe(24)
+                session["settings_entry_token"] = entry_token
+                return redirect(url_for("settings_page", entry=entry_token))
             return render_template_string(SETTINGS_LOGIN, error="密碼錯誤或尚未設定密碼"), 401
         return render_template_string(SETTINGS_LOGIN, error="")
 
@@ -489,7 +492,15 @@ def create_app(settings: Settings) -> Flask:
 
     @app.get("/settings")
     def settings_page():
-        if not settings_authenticated():
+        entry_token = request.args.get("entry", "")
+        expected_token = session.pop("settings_entry_token", None)
+        if (
+            not settings_authenticated()
+            or not expected_token
+            or not entry_token
+            or not hmac.compare_digest(entry_token, expected_token)
+        ):
+            session.pop("settings_authenticated", None)
             return redirect(url_for("settings_login"))
         return render_template_string(SETTINGS)
 

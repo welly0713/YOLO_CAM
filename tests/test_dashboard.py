@@ -34,7 +34,12 @@ def test_dashboard_has_three_live_slots_and_four_camera_settings(tmp_path, monke
         assert b"o.stop(t+30)" in home.data
         assert client.get("/settings").status_code == 302
         assert client.get("/api/config").status_code == 401
-        assert client.post("/settings/login", data={"password": "test-password"}).status_code == 302
+        login = client.post("/settings/login", data={"password": "test-password"})
+        assert login.status_code == 302
+        assert client.get(login.location).status_code == 200
+        assert client.get("/settings").status_code == 302
+        login = client.post("/settings/login", data={"password": "test-password"})
+        assert client.get(login.location).status_code == 200
         config = client.get("/api/config").get_json()
         assert len(config["cameras"]) == 4
         assert config["cameras"][0]["alert_enabled"] is True
